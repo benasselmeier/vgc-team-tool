@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VGC Team Tool</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Pokemon VGC</p>
+          <h1>Team Builder</h1>
+        </div>
+        <div class="topbar-actions">
+          <button id="loadSampleButton" type="button">Sample Team</button>
+          <button id="clearButton" type="button" class="secondary">Clear</button>
+        </div>
+      </header>
+
+      <section class="workspace" aria-label="Team workspace">
+        <div class="team-panel">
+          <div class="panel-header">
+            <div>
+              <h2>Team</h2>
+              <p>Enter names and moves. Types are filled in automatically.</p>
+            </div>
+            <span id="teamStatus" class="status-pill">0 / 6 loaded</span>
+          </div>
+          <div class="paste-panel">
+            <textarea id="teamPaste" rows="5" spellcheck="false" placeholder="Incineroar @ Safety Goggles&#10;Ability: Intimidate&#10;- Fake Out&#10;- Flare Blitz"></textarea>
+            <div class="paste-actions">
+              <button id="importButton" type="button">Import Paste</button>
+              <button id="exportButton" type="button" class="secondary">Export</button>
+            </div>
+          </div>
+          <div id="teamGrid" class="team-grid"></div>
+        </div>
+
+        <aside class="analysis-panel" aria-label="Team analysis">
+          <div class="panel-header compact">
+            <div>
+              <h2>Analysis</h2>
+              <p>Objective type pressure across the team.</p>
+            </div>
+          </div>
+
+          <section class="metric-block">
+            <h3>Type Matchups</h3>
+            <h4>Matches up poorly vs.</h4>
+            <div id="threatList" class="type-list empty-state">Add Pokemon to calculate team weaknesses.</div>
+          </section>
+
+          <section class="metric-block">
+            <h3>Coverage</h3>
+            <h4>Most coverage for</h4>
+            <div id="mostCoverageList" class="type-list empty-state">Add attacking moves to calculate strongest coverage.</div>
+
+            <h4>Least coverage for</h4>
+            <div id="leastCoverageList" class="type-list empty-state">Add attacking moves to find types with fewer than two coverage lines.</div>
+          </section>
+
+          <section class="metric-block">
+            <h3>Defensive Matrix</h3>
+            <div id="defenseMatrix" class="matrix"></div>
+          </section>
+
+          <section class="metric-block">
+            <h3>Suggestions</h3>
+            <ul id="suggestions" class="suggestions">
+              <li>Start by adding at least three Pokemon.</li>
+            </ul>
+          </section>
+        </aside>
+      </section>
+    </main>
+
+    <template id="pokemonCardTemplate">
+      <article class="pokemon-card">
+        <div class="card-top">
+          <div class="slot-number"></div>
+          <div class="sprite-wrap">
+            <img alt="" class="sprite" />
+          </div>
+        </div>
+        <label>
+          Pokemon
+          <input class="pokemon-input" type="text" autocomplete="off" spellcheck="false" placeholder="Amoonguss" />
+        </label>
+        <div class="type-row pokemon-types"></div>
+        <label>
+          Ability
+          <input class="ability-input" type="text" autocomplete="off" spellcheck="false" placeholder="Regenerator" />
+        </label>
+        <div class="moves"></div>
+        <p class="card-message"></p>
+      </article>
+    </template>
+
+    <script src="app.js"></script>
+  </body>
+</html>
