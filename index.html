@@ -28,13 +28,16 @@
             </div>
             <span id="teamStatus" class="status-pill">0 / 6 loaded</span>
           </div>
-          <div class="paste-panel">
-            <textarea id="teamPaste" rows="5" spellcheck="false" placeholder="Incineroar @ Safety Goggles&#10;Ability: Intimidate&#10;- Fake Out&#10;- Flare Blitz"></textarea>
-            <div class="paste-actions">
-              <button id="importButton" type="button">Import Paste</button>
-              <button id="exportButton" type="button" class="secondary">Export</button>
+          <details class="paste-drawer">
+            <summary>Import / Export</summary>
+            <div class="paste-panel">
+              <textarea id="teamPaste" rows="3" spellcheck="false" placeholder="Incineroar @ Safety Goggles&#10;Ability: Intimidate&#10;- Fake Out&#10;- Flare Blitz"></textarea>
+              <div class="paste-actions">
+                <button id="importButton" type="button">Import Paste</button>
+                <button id="exportButton" type="button" class="secondary">Export</button>
+              </div>
             </div>
-          </div>
+          </details>
           <div id="teamGrid" class="team-grid"></div>
         </div>
 
@@ -48,7 +51,7 @@
 
           <section class="metric-block">
             <h3>Type Matchups</h3>
-            <h4>Matches up poorly vs.</h4>
+            <h4>Shared Weaknesses</h4>
             <div id="threatList" class="type-list empty-state">Add Pokemon to calculate team weaknesses.</div>
           </section>
 
@@ -59,6 +62,13 @@
 
             <h4>Least coverage for</h4>
             <div id="leastCoverageList" class="type-list empty-state">Add attacking moves to find types with fewer than two coverage lines.</div>
+          </section>
+
+          <section class="metric-block">
+            <h3>Priority</h3>
+            <div id="priorityInsight" class="priority-columns empty-state">Add moves and abilities to see priority options.</div>
+            <h4>Speed Control</h4>
+            <div id="speedControlInsight" class="speed-control-list empty-state">Add speed control moves to see turn-order effects.</div>
           </section>
 
           <section class="metric-block">
@@ -89,10 +99,17 @@
           <input class="pokemon-input" type="text" autocomplete="off" spellcheck="false" placeholder="Amoonguss" />
         </label>
         <div class="type-row pokemon-types"></div>
-        <label>
-          Ability
-          <input class="ability-input" type="text" autocomplete="off" spellcheck="false" placeholder="Regenerator" />
-        </label>
+        <div class="stat-strip empty-state"></div>
+        <div class="pokemon-details">
+          <label>
+            Ability
+            <input class="ability-input" type="text" autocomplete="off" spellcheck="false" placeholder="Regenerator" />
+          </label>
+          <label>
+            Held Item
+            <input class="item-input" type="text" autocomplete="off" spellcheck="false" placeholder="Safety Goggles" />
+          </label>
+        </div>
         <div class="moves"></div>
         <p class="card-message"></p>
       </article>
