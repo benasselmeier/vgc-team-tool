@@ -19,6 +19,99 @@ const TYPES = [
   "fairy",
 ];
 
+const STAT_LABELS = {
+  hp: "HP",
+  attack: "Atk",
+  defense: "Def",
+  "special-attack": "SpA",
+  "special-defense": "SpD",
+  speed: "Spe",
+};
+
+const HEALING_MOVES = new Set([
+  "draining-kiss",
+  "floral-healing",
+  "heal-order",
+  "heal-pulse",
+  "healing-wish",
+  "horn-leech",
+  "leech-life",
+  "milk-drink",
+  "moonlight",
+  "morning-sun",
+  "pollen-puff",
+  "recover",
+  "roost",
+  "shore-up",
+  "slack-off",
+  "soft-boiled",
+  "strength-sap",
+  "synthesis",
+  "wish",
+]);
+
+const PRIORITY_ANALYSIS_IGNORES = new Set(["protect"]);
+
+const SOUND_MOVES = new Set([
+  "alluring-voice",
+  "boomburst",
+  "bug-buzz",
+  "chatter",
+  "clangorous-soul",
+  "clangorous-soulblaze",
+  "clanging-scales",
+  "confide",
+  "disarming-voice",
+  "echoed-voice",
+  "eerie-spell",
+  "grass-whistle",
+  "growl",
+  "heal-bell",
+  "hyper-voice",
+  "metal-sound",
+  "noble-roar",
+  "overdrive",
+  "parting-shot",
+  "perish-song",
+  "psychic-noise",
+  "relic-song",
+  "roar",
+  "round",
+  "screech",
+  "sing",
+  "snarl",
+  "snore",
+  "sparkling-aria",
+  "sparkly-swirl",
+  "supersonic",
+  "torch-song",
+  "uproar",
+]);
+
+const RAGING_BULL_TYPES = {
+  "tauros-paldea-combat-breed": "fighting",
+  "paldean-tauros-combat-breed": "fighting",
+  "paldean-tauros-combat": "fighting",
+  "combat-breed-paldean-tauros": "fighting",
+  "combat-paldean-tauros": "fighting",
+  "tauros-combat-breed": "fighting",
+  "tauros-paldea-combat": "fighting",
+  "tauros-paldea-blaze-breed": "fire",
+  "paldean-tauros-blaze-breed": "fire",
+  "paldean-tauros-blaze": "fire",
+  "blaze-breed-paldean-tauros": "fire",
+  "blaze-paldean-tauros": "fire",
+  "tauros-blaze-breed": "fire",
+  "tauros-paldea-blaze": "fire",
+  "tauros-paldea-aqua-breed": "water",
+  "paldean-tauros-aqua-breed": "water",
+  "paldean-tauros-aqua": "water",
+  "aqua-breed-paldean-tauros": "water",
+  "aqua-paldean-tauros": "water",
+  "tauros-aqua-breed": "water",
+  "tauros-paldea-aqua": "water",
+};
+
 const TYPE_CHART = {
   normal: { rock: 0.5, ghost: 0, steel: 0.5 },
   fire: { fire: 0.5, water: 0.5, grass: 2, ice: 2, bug: 2, rock: 0.5, dragon: 0.5, steel: 2 },
@@ -78,37 +171,43 @@ const SAMPLE_TEAM = [
   {
     pokemon: "Incineroar",
     ability: "Intimidate",
+    item: "Safety Goggles",
     moves: ["Fake Out", "Flare Blitz", "Parting Shot", "Knock Off"],
   },
   {
     pokemon: "Amoonguss",
     ability: "Regenerator",
+    item: "Sitrus Berry",
     moves: ["Spore", "Rage Powder", "Pollen Puff", "Clear Smog"],
   },
   {
     pokemon: "Flutter Mane",
     ability: "Protosynthesis",
+    item: "Booster Energy",
     moves: ["Moonblast", "Shadow Ball", "Icy Wind", "Protect"],
   },
   {
     pokemon: "Urshifu Rapid Strike",
     ability: "Unseen Fist",
+    item: "Mystic Water",
     moves: ["Surging Strikes", "Close Combat", "Aqua Jet", "Protect"],
   },
   {
     pokemon: "Rillaboom",
     ability: "Grassy Surge",
+    item: "Assault Vest",
     moves: ["Fake Out", "Wood Hammer", "Grassy Glide", "U-turn"],
   },
   {
     pokemon: "Kingambit",
     ability: "Defiant",
+    item: "Black Glasses",
     moves: ["Kowtow Cleave", "Iron Head", "Sucker Punch", "Protect"],
   },
 ];
 
 const POKE_API = "https://pokeapi.co/api/v2";
-const team = Array.from({ length: 6 }, () => ({ pokemon: "", ability: "", moves: ["", "", "", ""] }));
+const team = Array.from({ length: 6 }, () => ({ pokemon: "", ability: "", item: "", moves: ["", "", "", ""] }));
 const pokemonCache = new Map();
 const moveCache = new Map();
 let pendingSave = null;
@@ -119,6 +218,8 @@ const elements = {
   threatList: document.querySelector("#threatList"),
   mostCoverageList: document.querySelector("#mostCoverageList"),
   leastCoverageList: document.querySelector("#leastCoverageList"),
+  priorityInsight: document.querySelector("#priorityInsight"),
+  speedControlInsight: document.querySelector("#speedControlInsight"),
   defenseMatrix: document.querySelector("#defenseMatrix"),
   suggestions: document.querySelector("#suggestions"),
   template: document.querySelector("#pokemonCardTemplate"),
@@ -162,6 +263,73 @@ function moveTypeBadge(type) {
   return typeBadge(type);
 }
 
+function priorityBadge(priority) {
+  const span = document.createElement("span");
+  span.className = "priority-badge";
+  span.title = `Priority +${priority}`;
+  span.textContent = `+${priority}`;
+  return span;
+}
+
+function ragingBullType(slot) {
+  const pokemonTypes = slot.meta?.types || [];
+  if (pokemonTypes.includes("water")) return "water";
+  if (pokemonTypes.includes("fire")) return "fire";
+  if (pokemonTypes.includes("fighting")) return "fighting";
+
+  const metaName = normalizeName(slot.meta?.name || "");
+  const rawName = normalizeName(slot.pokemon || "");
+  return RAGING_BULL_TYPES[metaName] || RAGING_BULL_TYPES[rawName] || null;
+}
+
+function getEffectiveMove(slot, move) {
+  if (!move) return null;
+  const moveName = normalizeName(move.name);
+  let effectiveType = move.type;
+
+  if (moveName === "raging-bull") {
+    effectiveType = ragingBullType(slot) || effectiveType;
+  }
+
+  if (normalizeName(slot.ability) === "liquid-voice" && SOUND_MOVES.has(moveName)) {
+    effectiveType = "water";
+  }
+
+  return { ...move, effectiveType };
+}
+
+function getSpeedControlKind(move) {
+  const moveName = normalizeName(move.name);
+  if (moveName === "tailwind" || moveName === "trick-room" || moveName === "quash" || moveName === "after-you") return "setup";
+  if (moveName === "icy-wind" || moveName === "electroweb" || moveName === "bulldoze" || moveName === "rock-tomb" || moveName === "mud-shot") return "drop";
+  if (moveName === "glare" || moveName === "thunder-wave" || moveName === "nuzzle" || moveName === "stun-spore" || moveName === "thunder" || moveName === "zap-cannon" || moveName === "body-slam") return "paralysis";
+  if (move.meta?.ailment?.name === "paralysis" && (move.meta?.ailment_chance || 0) > 0) return "paralysis";
+  if (move.statChanges?.some((entry) => entry.stat?.name === "speed" && entry.change < 0)) return "drop";
+  return null;
+}
+
+function renderStatStrip(container, stats) {
+  if (!stats) {
+    container.className = "stat-strip empty-state";
+    container.textContent = "";
+    return;
+  }
+
+  container.className = "stat-strip";
+  container.replaceChildren(
+    ...Object.entries(STAT_LABELS).map(([key, label]) => {
+      const item = document.createElement("span");
+      item.className = "stat-chip";
+      const statLabel = document.createElement("strong");
+      statLabel.textContent = label;
+      const value = document.createElement("span");
+      value.textContent = stats[key];
+      item.append(statLabel, value);
+      return item;
+    }),
+  );
+}
+
 function getTypeMultiplier(attackType, defenderTypes) {
   return defenderTypes.reduce((total, defenderType) => {
     const modifier = TYPE_CHART[attackType]?.[defenderType] ?? 1;
@@ -203,12 +371,33 @@ function pokemonApiName(name) {
     "chi-yu": "chi-yu",
     "ting-lu": "ting-lu",
     "wo-chien": "wo-chien",
+    "paldean-tauros-combat-breed": "tauros-paldea-combat-breed",
+    "paldean-tauros-combat": "tauros-paldea-combat-breed",
+    "combat-breed-paldean-tauros": "tauros-paldea-combat-breed",
+    "combat-paldean-tauros": "tauros-paldea-combat-breed",
+    "tauros-combat-breed": "tauros-paldea-combat-breed",
+    "tauros-paldea-combat": "tauros-paldea-combat-breed",
+    "paldean-tauros-blaze-breed": "tauros-paldea-blaze-breed",
+    "paldean-tauros-blaze": "tauros-paldea-blaze-breed",
+    "blaze-breed-paldean-tauros": "tauros-paldea-blaze-breed",
+    "blaze-paldean-tauros": "tauros-paldea-blaze-breed",
+    "tauros-blaze-breed": "tauros-paldea-blaze-breed",
+    "tauros-paldea-blaze": "tauros-paldea-blaze-breed",
+    "paldean-tauros-aqua-breed": "tauros-paldea-aqua-breed",
+    "paldean-tauros-aqua": "tauros-paldea-aqua-breed",
+    "aqua-breed-paldean-tauros": "tauros-paldea-aqua-breed",
+    "aqua-paldean-tauros": "tauros-paldea-aqua-breed",
+    "tauros-aqua-breed": "tauros-paldea-aqua-breed",
+    "tauros-paldea-aqua": "tauros-paldea-aqua-breed",
   };
+  if (aliases[normalized]) {
+    return aliases[normalized];
+  }
   const regionalMatch = normalized.match(/^(alolan|galarian|hisuian|paldean)-(.+)$/);
   if (regionalMatch) {
     return `${regionalMatch[2]}-${regionalPrefixes[regionalMatch[1]]}`;
   }
-  return aliases[normalized] ?? normalized;
+  return normalized;
 }
 
 async function getPokemon(name) {
@@ -219,6 +408,7 @@ async function getPokemon(name) {
   const promise = fetchJson(`${POKE_API}/pokemon/${apiName}`).then((data) => ({
     name: titleCase(data.name),
     types: data.types.map((entry) => entry.type.name),
+    stats: Object.fromEntries(data.stats.map((entry) => [entry.stat.name, entry.base_stat])),
     sprite:
       data.sprites.other["official-artwork"].front_default ||
       data.sprites.front_default ||
@@ -238,6 +428,9 @@ async function getMove(name) {
     name: titleCase(data.name),
     type: data.type.name,
     damageClass: data.damage_class.name,
+    priority: data.priority,
+    meta: data.meta,
+    statChanges: data.stat_changes,
   }));
 
   moveCache.set(apiName, promise);
@@ -259,6 +452,7 @@ function loadStoredTeam() {
       team[index] = {
         pokemon: slot.pokemon || "",
         ability: slot.ability || "",
+        item: slot.item || "",
         moves: Array.from({ length: 4 }, (_, moveIndex) => slot.moves?.[moveIndex] || ""),
       };
     });
@@ -283,6 +477,14 @@ function renderTeam() {
     abilityInput.value = slot.ability;
     abilityInput.addEventListener("input", () => {
       team[index].ability = abilityInput.value;
+      saveTeam();
+      hydrateSlotMoves(index).then(analyzeTeam);
+    });
+
+    const itemInput = card.querySelector(".item-input");
+    itemInput.value = slot.item;
+    itemInput.addEventListener("input", () => {
+      team[index].item = itemInput.value;
       saveTeam();
     });
 
@@ -320,10 +522,12 @@ async function hydrateCard(index) {
   const typeRow = card.querySelector(".pokemon-types");
   const message = card.querySelector(".card-message");
   const sprite = card.querySelector(".sprite");
+  const statStrip = card.querySelector(".stat-strip");
 
   typeRow.innerHTML = "";
   message.textContent = "";
   sprite.removeAttribute("src");
+  renderStatStrip(statStrip, null);
 
   if (slot.pokemon.trim()) {
     message.textContent = "Loading Pokemon...";
@@ -331,6 +535,7 @@ async function hydrateCard(index) {
       const pokemon = await getPokemon(slot.pokemon);
       slot.meta = pokemon;
       typeRow.replaceChildren(...pokemon.types.map(typeBadge));
+      renderStatStrip(statStrip, pokemon.stats);
       sprite.src = pokemon.sprite;
       sprite.alt = `${pokemon.name} artwork`;
       message.textContent = "";
@@ -361,10 +566,13 @@ async function hydrateMove(index, moveIndex) {
 
   try {
     const move = await getMove(slot.moves[moveIndex]);
+    const effectiveMove = getEffectiveMove(slot, move);
     slot.moveMeta = slot.moveMeta || [];
     slot.moveMeta[moveIndex] = move;
     typeContainer.classList.toggle("status-move", move.damageClass === "status");
-    typeContainer.replaceChildren(moveTypeBadge(move.type));
+    const badges = [moveTypeBadge(effectiveMove.effectiveType)];
+    if (move.priority > 0) badges.push(priorityBadge(move.priority));
+    typeContainer.replaceChildren(...badges);
   } catch {
     slot.moveMeta = slot.moveMeta || [];
     slot.moveMeta[moveIndex] = null;
@@ -373,6 +581,10 @@ async function hydrateMove(index, moveIndex) {
     span.textContent = "?";
     typeContainer.append(span);
   }
+}
+
+function hydrateSlotMoves(index) {
+  return Promise.all(team[index].moves.map((move, moveIndex) => hydrateMove(index, moveIndex)));
 }
 
 function getCard(index) {
@@ -393,7 +605,9 @@ function updateMove(index, moveIndex, value) {
 
 function analyzeTeam() {
   const loadedPokemon = team.filter((slot) => slot.meta?.types?.length);
-  const loadedMoves = team.flatMap((slot) => slot.moveMeta || []).filter((move) => move?.type);
+  const loadedMoves = team
+    .flatMap((slot) => (slot.moveMeta || []).map((move) => getEffectiveMove(slot, move)))
+    .filter((move) => move?.effectiveType);
   const attackingMoves = loadedMoves.filter((move) => move.damageClass !== "status");
 
   elements.teamStatus.textContent = `${loadedPokemon.length} / 6 loaded`;
@@ -408,16 +622,18 @@ function analyzeTeam() {
   });
 
   const offensiveRows = TYPES.map((defenderType) => {
-    const superEffectiveMoves = attackingMoves.filter((move) => getTypeMultiplier(move.type, [defenderType]) > 1);
+    const superEffectiveMoves = attackingMoves.filter((move) => getTypeMultiplier(move.effectiveType, [defenderType]) > 1);
     return {
       type: defenderType,
       count: superEffectiveMoves.length,
-      sources: [...new Set(superEffectiveMoves.map((move) => move.type))],
+      sources: [...new Set(superEffectiveMoves.map((move) => move.effectiveType))],
     };
   });
 
   renderThreats(defensiveRows, loadedPokemon.length);
   renderCoverage(offensiveRows, attackingMoves.length);
+  renderPriority(getPriorityRows(team), loadedPokemon.length);
+  renderSpeedControl(getSpeedControlRows(team), loadedPokemon.length);
   renderMatrix(defensiveRows, loadedPokemon.length);
   renderSuggestions(defensiveRows, offensiveRows, loadedPokemon.length, loadedMoves.length - attackingMoves.length);
 }
@@ -490,6 +706,263 @@ function scoreChip(type, score) {
   return chip;
 }
 
+function getPriorityRows(slots) {
+  const groups = {
+    damage: [],
+    disruption: [],
+  };
+  const blockers = [];
+  const hasGrassySurge = slots.some((slot) => normalizeName(slot.ability) === "grassy-surge");
+
+  const addPriorityNote = (group, title, body) => {
+    groups[group].push({ title, body });
+  };
+
+  const formatMoves = (moves) => moves.map((move) => `${move.name} +${move.priority}`).join(", ");
+
+  slots.forEach((slot) => {
+    if (!slot.pokemon && !slot.meta) return;
+
+    const pokemonName = slot.meta?.name || slot.pokemon;
+    const ability = normalizeName(slot.ability);
+    const moves = (slot.moveMeta || []).filter(Boolean);
+    const directPriority = moves.filter((move) => move.priority > 0 && !PRIORITY_ANALYSIS_IGNORES.has(normalizeName(move.name)));
+    const directDamage = directPriority.filter((move) => move.damageClass !== "status");
+    const directDisruption = directPriority.filter((move) => move.damageClass === "status");
+
+    if (directDamage.length) {
+      addPriorityNote("damage", pokemonName, formatMoves(directDamage));
+    }
+
+    if (directDisruption.length) {
+      addPriorityNote("disruption", pokemonName, formatMoves(directDisruption));
+    }
+
+    if (ability === "prankster") {
+      const statusMoves = moves.filter(
+        (move) => move.damageClass === "status" && !PRIORITY_ANALYSIS_IGNORES.has(normalizeName(move.name)),
+      );
+      addPriorityNote(
+        "disruption",
+        pokemonName,
+        statusMoves.length
+          ? `Prankster can raise status moves like ${statusMoves.map((move) => move.name).join(", ")}.`
+          : "Prankster can give status moves increased priority.",
+      );
+    }
+
+    if (ability === "gale-wings") {
+      const flyingMoves = moves.map((move) => getEffectiveMove(slot, move)).filter((move) => move.effectiveType === "flying");
+      const flyingDamage = flyingMoves.filter((move) => move.damageClass !== "status");
+      const flyingDisruption = flyingMoves.filter((move) => move.damageClass === "status");
+      if (flyingDamage.length) {
+        addPriorityNote(
+          "damage",
+          pokemonName,
+          `Gale Wings can raise Flying attacks like ${flyingDamage.map((move) => move.name).join(", ")} while at full HP.`,
+        );
+      }
+      if (flyingDisruption.length) {
+        addPriorityNote(
+          "disruption",
+          pokemonName,
+          `Gale Wings can raise Flying status moves like ${flyingDisruption.map((move) => move.name).join(", ")} while at full HP.`,
+        );
+      }
+      if (!flyingMoves.length) {
+        addPriorityNote("disruption", pokemonName, "Gale Wings can give Flying moves increased priority while at full HP.");
+      }
+    }
+
+    if (ability === "triage") {
+      const healingMoves = moves.filter((move) => HEALING_MOVES.has(normalizeName(move.name)));
+      const healingDamage = healingMoves.filter((move) => move.damageClass !== "status");
+      const healingDisruption = healingMoves.filter((move) => move.damageClass === "status");
+      if (healingDamage.length) {
+        addPriorityNote("damage", pokemonName, `Triage can raise draining attacks like ${healingDamage.map((move) => move.name).join(", ")}.`);
+      }
+      if (healingDisruption.length) {
+        addPriorityNote("disruption", pokemonName, `Triage can raise healing status moves like ${healingDisruption.map((move) => move.name).join(", ")}.`);
+      }
+      if (!healingMoves.length) {
+        addPriorityNote("disruption", pokemonName, "Triage can give healing moves increased priority.");
+      }
+    }
+
+    if (hasGrassySurge && moves.some((move) => normalizeName(move.name) === "grassy-glide")) {
+      addPriorityNote("damage", pokemonName, "Grassy Glide can become priority while Grassy Terrain is active.");
+    }
+
+    if (["armor-tail", "queenly-majesty", "dazzling"].includes(ability)) {
+      blockers.push(`${pokemonName} blocks opposing priority moves with ${slot.ability}.`);
+    }
+
+    if (ability === "psychic-surge") {
+      blockers.push(`${pokemonName} can set Psychic Terrain, which blocks many priority moves against grounded Pokemon.`);
+    }
+  });
+
+  if (blockers.length) {
+    addPriorityNote("disruption", "Priority protection", blockers.join(" "));
+  }
+
+  return groups;
+}
+
+function getSpeedControlRows(slots) {
+  const groups = {
+    drop: [],
+    setup: [],
+    paralysis: [],
+  };
+
+  const addSpeedNote = (group, title, body) => {
+    groups[group].push({ title, body });
+  };
+
+  slots.forEach((slot) => {
+    if (!slot.pokemon && !slot.meta) return;
+
+    const pokemonName = slot.meta?.name || slot.pokemon;
+    const moves = (slot.moveMeta || []).filter(Boolean).map((move) => getEffectiveMove(slot, move));
+    const speedDroppers = moves.filter((move) => getSpeedControlKind(move) === "drop");
+    const turnOrderMoves = moves.filter((move) => getSpeedControlKind(move) === "setup");
+    const paralysisMoves = moves.filter((move) => getSpeedControlKind(move) === "paralysis");
+
+    if (speedDroppers.length) {
+      addSpeedNote(
+        "drop",
+        pokemonName,
+        speedDroppers
+          .map((move) => {
+            const speedChange = move.statChanges.find((entry) => entry.stat?.name === "speed")?.change ?? 0;
+            return `${move.name} ${speedChange < 0 ? `(${speedChange} Speed)` : ""}`.trim();
+          })
+          .join(", "),
+      );
+    }
+
+    if (turnOrderMoves.length) {
+      addSpeedNote("setup", pokemonName, `sets ${turnOrderMoves.map((move) => move.name).join(", ")}`);
+    }
+
+    if (paralysisMoves.length) {
+      addSpeedNote("paralysis", pokemonName, `can paralyze with ${paralysisMoves.map((move) => move.name).join(", ")}`);
+    }
+  });
+
+  return groups;
+}
+
+function renderPriority(groups, teamSize) {
+  if (!teamSize) {
+    elements.priorityInsight.className = "priority-columns empty-state";
+    elements.priorityInsight.textContent = "Add moves and abilities to see priority options.";
+    return;
+  }
+
+  if (!groups.damage.length && !groups.disruption.length) {
+    elements.priorityInsight.className = "priority-columns empty-state";
+    elements.priorityInsight.textContent = "No clear priority tools detected yet.";
+    return;
+  }
+
+  elements.priorityInsight.className = "priority-columns";
+  const renderGroup = (label, rows, groupClass) => {
+    const section = document.createElement("div");
+    section.className = `priority-column ${groupClass}`;
+
+    const heading = document.createElement("h4");
+    heading.textContent = label;
+    section.append(heading);
+
+    rows.forEach((row) => {
+      const item = document.createElement("div");
+      item.className = "priority-note";
+
+      const title = document.createElement("strong");
+      title.textContent = row.title;
+
+      const body = document.createElement("span");
+      body.textContent = row.body;
+
+      item.append(title, body);
+      section.append(item);
+    });
+
+    if (!rows.length) {
+      const empty = document.createElement("div");
+      empty.className = "priority-note empty-state";
+      empty.textContent = "None detected.";
+      section.append(empty);
+    }
+
+    return section;
+  };
+
+  const sections = [
+    renderGroup("Damage", groups.damage, "damage"),
+    renderGroup("Disruption", groups.disruption, "disruption"),
+  ];
+
+  elements.priorityInsight.replaceChildren(...sections);
+}
+
+function renderSpeedControl(groups, teamSize) {
+  if (!teamSize) {
+    elements.speedControlInsight.className = "speed-control-list empty-state";
+    elements.speedControlInsight.textContent = "Add speed control moves to see turn-order effects.";
+    return;
+  }
+
+  if (!groups.drop.length && !groups.setup.length && !groups.paralysis.length) {
+    elements.speedControlInsight.className = "speed-control-list empty-state";
+    elements.speedControlInsight.textContent = "No clear speed control tools detected yet.";
+    return;
+  }
+
+  elements.speedControlInsight.className = "speed-control-list";
+  const renderGroup = (label, rows) => {
+    const section = document.createElement("div");
+    section.className = "speed-control-group";
+
+    const heading = document.createElement("h4");
+    heading.textContent = label;
+    section.append(heading);
+
+    rows.forEach((row) => {
+      const item = document.createElement("div");
+      item.className = "speed-control-note";
+
+      const title = document.createElement("strong");
+      title.textContent = row.title;
+
+      const body = document.createElement("span");
+      body.textContent = row.body;
+
+      item.append(title, body);
+      section.append(item);
+    });
+
+    if (!rows.length) {
+      const empty = document.createElement("div");
+      empty.className = "speed-control-note empty-state";
+      empty.textContent = "None detected.";
+      section.append(empty);
+    }
+
+    return section;
+  };
+
+  const sections = [
+    renderGroup("Speed Drops", groups.drop),
+    renderGroup("Turn Order", groups.setup),
+    renderGroup("Paralysis", groups.paralysis),
+  ];
+
+  elements.speedControlInsight.replaceChildren(...sections);
+}
+
 function renderMatrix(rows, teamSize) {
   if (!teamSize) {
     elements.defenseMatrix.className = "matrix empty-state";
@@ -498,29 +971,41 @@ function renderMatrix(rows, teamSize) {
   }
 
   elements.defenseMatrix.className = "matrix";
-  elements.defenseMatrix.replaceChildren(
-    ...rows
-      .slice()
-      .sort((a, b) => b.weak - a.weak || b.total - a.total)
-      .map((row) => {
-        const item = document.createElement("div");
-        item.className = "matrix-row";
-        const badge = typeBadge(row.type);
-        const bar = document.createElement("div");
-        bar.className = "matrix-bar";
-        const fill = document.createElement("div");
-        fill.className = "matrix-fill";
-        fill.style.width = `${Math.min(100, (row.weak / Math.max(teamSize, 1)) * 100)}%`;
-        if (row.weak >= 3) fill.style.background = "var(--accent-2)";
-        if (row.weak === 0) fill.style.background = "var(--good)";
-        bar.append(fill);
+  const grouped = rows
+    .slice()
+    .sort((a, b) => b.weak - a.weak || b.total - a.total)
+    .reduce((acc, row) => {
+      const key = row.weak;
+      if (!acc.has(key)) acc.set(key, []);
+      acc.get(key).push(row);
+      return acc;
+    }, new Map());
 
-        const value = document.createElement("span");
-        value.className = "matrix-value";
-        value.textContent = `${row.weak}/${teamSize}`;
-        item.append(badge, bar, value);
-        return item;
-      }),
+  elements.defenseMatrix.replaceChildren(
+    ...[...grouped.entries()].map(([weakCount, groupRows]) => {
+      const group = document.createElement("div");
+      group.className = "matrix-group";
+
+      const heading = document.createElement("h4");
+      heading.textContent = `${weakCount} weakness${weakCount === 1 ? "" : "es"}`;
+      group.append(heading);
+
+      const item = document.createElement("div");
+      item.className = "matrix-row";
+
+      const types = document.createElement("div");
+      types.className = "matrix-types";
+      types.append(...groupRows.map((row) => typeBadge(row.type)));
+
+      const value = document.createElement("span");
+      value.className = "matrix-value";
+      value.textContent = `${weakCount}/${teamSize}`;
+
+      item.append(types, value);
+      group.append(item);
+
+      return group;
+    }),
   );
 }
 
@@ -585,6 +1070,7 @@ function loadSampleTeam() {
     team[index] = {
       pokemon: slot.pokemon,
       ability: slot.ability,
+      item: slot.item,
       moves: [...slot.moves],
     };
   });
@@ -594,7 +1080,7 @@ function loadSampleTeam() {
 
 function clearTeam() {
   team.forEach((slot, index) => {
-    team[index] = { pokemon: "", ability: "", moves: ["", "", "", ""] };
+    team[index] = { pokemon: "", ability: "", item: "", moves: ["", "", "", ""] };
   });
   localStorage.removeItem("vgc-team-tool");
   elements.teamPaste.value = "";
@@ -614,6 +1100,8 @@ function parseTeamPaste(text) {
         .map((line) => line.trim())
         .filter(Boolean);
       const header = lines[0] || "";
+      const itemMatch = header.match(/\s@\s(.+)$/);
+      const item = itemMatch ? itemMatch[1].trim() : "";
       const headerWithoutItem = header.replace(/\s*@.*$/, "").trim();
       const parentheticalSpecies = [...headerWithoutItem.matchAll(/\(([^)]+)\)/g)]
         .map((match) => match[1].trim())
@@ -629,6 +1117,7 @@ function parseTeamPaste(text) {
       return {
         pokemon,
         ability: abilityLine ? abilityLine.replace(/^ability:\s*/i, "").trim() : "",
+        item,
         moves: Array.from({ length: 4 }, (_, index) => moves[index] || ""),
       };
     });
@@ -639,7 +1128,7 @@ function importPaste() {
   if (!parsed.length) return;
 
   team.forEach((slot, index) => {
-    team[index] = parsed[index] || { pokemon: "", ability: "", moves: ["", "", "", ""] };
+    team[index] = parsed[index] || { pokemon: "", ability: "", item: "", moves: ["", "", "", ""] };
   });
   saveTeam();
   renderTeam();
@@ -647,9 +1136,9 @@ function importPaste() {
 
 function exportTeam() {
   const text = team
-    .filter((slot) => slot.pokemon || slot.ability || slot.moves.some(Boolean))
+    .filter((slot) => slot.pokemon || slot.ability || slot.item || slot.moves.some(Boolean))
     .map((slot) => {
-      const lines = [slot.pokemon || "Unknown"];
+      const lines = [`${slot.pokemon || "Unknown"}${slot.item ? ` @ ${slot.item}` : ""}`];
       if (slot.ability) lines.push(`Ability: ${slot.ability}`);
       slot.moves.filter(Boolean).forEach((move) => lines.push(`- ${move}`));
       return lines.join("\n");
