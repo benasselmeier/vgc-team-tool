@@ -486,6 +486,22 @@ function renderTeam() {
     pokemonInput.addEventListener("change", () => updatePokemon(index, pokemonInput.value));
     pokemonInput.addEventListener("blur", () => updatePokemon(index, pokemonInput.value));
 
+    const lineDraftCheckbox = card.querySelector(".line-draft-checkbox");
+    lineDraftCheckbox.checked = lineDraftSlots.includes(index);
+    lineDraftCheckbox.addEventListener("change", () => {
+      if (lineDraftCheckbox.checked) {
+        if (lineDraftSlots.length >= 4) {
+          lineDraftCheckbox.checked = false;
+          return;
+        }
+        lineDraftSlots = [...lineDraftSlots, index];
+      } else {
+        lineDraftSlots = lineDraftSlots.filter((slotIndex) => slotIndex !== index);
+      }
+      syncLineDraftCheckboxes();
+      analyzeTeam();
+    });
+
     const abilityInput = card.querySelector(".ability-input");
     abilityInput.value = slot.ability;
     abilityInput.addEventListener("input", () => {
@@ -622,25 +638,25 @@ function getLineSlots(line) {
 }
 
 function renderLineBuilder() {
-  elements.lineSlotPicker.replaceChildren(
-    ...team.map((slot, index) => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = `line-slot-button ${lineDraftSlots.includes(index) ? "active" : "secondary"}`;
-      const pokemonName = slot.meta?.name || slot.pokemon || `Slot ${index + 1}`;
-      button.textContent = `${index + 1}. ${pokemonName}`;
-      button.title = `Toggle slot ${index + 1} in current line draft`;
-      button.addEventListener("click", () => {
-        if (lineDraftSlots.includes(index)) {
-          lineDraftSlots = lineDraftSlots.filter((entry) => entry !== index);
-        } else if (lineDraftSlots.length < 4) {
-          lineDraftSlots = [...lineDraftSlots, index];
-        }
-        renderLineBuilder();
-      });
-      return button;
-    }),
-  );
+  const buttons = team.map((slot, index) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `line-slot-button ${lineDraftSlots.includes(index) ? "active" : "secondary"}`;
+    const pokemonName = slot.meta?.name || slot.pokemon || `Slot ${index + 1}`;
+    button.textContent = `${index + 1}. ${pokemonName}`;
+    button.title = `Toggle slot ${index + 1} in current line draft`;
+    button.addEventListener("click", () => {
+      if (lineDraftSlots.includes(index)) {
+        lineDraftSlots = lineDraftSlots.filter((entry) => entry !== index);
+      } else if (lineDraftSlots.length < 4) {
+        lineDraftSlots = [...lineDraftSlots, index];
+      }
+      syncLineDraftCheckboxes();
+      analyzeTeam();
+    });
+    return button;
+  });
+  elements.lineSlotPicker.replaceChildren(...buttons);
 }
 
 function renderLinesAnalysis() {
@@ -663,7 +679,7 @@ function renderLinesAnalysis() {
     select.type = "button";
     select.className = "secondary";
     select.textContent = line.name;
-    select.addEventListener("click", () => { selectedLineId = line.id; lineDraftSlots = [...line.slots]; saveTeam(); analyzeTeam(); });
+    select.addEventListener("click", () => { selectedLineId = line.id; lineDraftSlots = [...line.slots]; syncLineDraftCheckboxes(); saveTeam(); analyzeTeam(); });
     const del = document.createElement("button");
     del.type = "button";
     del.textContent = "Delete";
@@ -673,6 +689,13 @@ function renderLinesAnalysis() {
   }));
 }
 
+function syncLineDraftCheckboxes() {
+  team.forEach((slot, index) => {
+    const card = getCard(index);
+    const checkbox = card?.querySelector(".line-draft-checkbox");
+    if (checkbox) checkbox.checked = lineDraftSlots.includes(index);
+  });
+}
 function analyzeTeam() {
   const loadedPokemon = team.filter((slot) => slot.meta?.types?.length);
   const loadedMoves = team
@@ -1254,6 +1277,7 @@ elements.addLineButton.addEventListener("click", () => {
   selectedLineId = line.id;
   lineDraftSlots = [];
   elements.lineNameInput.value = "";
+  syncLineDraftCheckboxes();
   saveTeam();
   analyzeTeam();
 });
