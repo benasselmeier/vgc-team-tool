@@ -644,4 +644,10 @@ textarea:focus {
 .saved-lines { display: grid; gap: 6px; margin-bottom: 10px; }
 .saved-line { display: flex; gap: 6px; }
 .saved-line.active { outline: 1px solid var(--accent); border-radius: 8px; padding: 4px; }
+.line-hint { margin: 0; color: var(--muted); font-size: 12px; }
+
 .line-draft-toggle { margin: 6px 0; text-transform: none; font-size: 12px; color: var(--ink); display: flex; align-items: center; gap: 6px; }
+
+.saved-team-block { margin: 10px 0; }
+.saved-team-block h3 { margin: 0 0 8px; }
+.saved-team-controls { margin-bottom: 8px; }

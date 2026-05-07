@@ -15,6 +15,7 @@
         </div>
         <div class="topbar-actions">
           <button id="loadSampleButton" type="button">Sample Team</button>
+          <button id="saveTeamButton" type="button" class="secondary">Save Team</button>
           <button id="clearButton" type="button" class="secondary">Clear</button>
         </div>
       </header>
@@ -38,6 +39,13 @@
               </div>
             </div>
           </details>
+          <section class="saved-team-block">
+            <h3>Saved Teams</h3>
+            <div class="saved-team-controls">
+              <input id="teamNameInput" type="text" placeholder="My BO3 Team" />
+            </div>
+            <div id="savedTeams" class="saved-lines empty-state">No saved teams yet.</div>
+          </section>
           <div id="teamGrid" class="team-grid"></div>
         </div>
 
@@ -82,6 +90,7 @@
               </label>
               <div id="lineSlotPicker" class="line-slot-picker"></div>
               <button id="addLineButton" type="button">Save 4-Pokemon Line</button>
+              <p class="line-hint">Tip: If you save before selecting 4 slots, it will start with slots 1-4.</p>
             </div>
             <div id="savedLines" class="saved-lines empty-state">No lines saved yet.</div>
             <h4>Selected line matchup</h4>

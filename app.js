@@ -214,6 +214,7 @@ let pendingSave = null;
 let lines = [];
 let selectedLineId = null;
 let lineDraftSlots = [];
+let savedTeams = [];
 
 const elements = {
   teamGrid: document.querySelector("#teamGrid"),
@@ -231,6 +232,9 @@ const elements = {
   exportButton: document.querySelector("#exportButton"),
   loadSampleButton: document.querySelector("#loadSampleButton"),
   clearButton: document.querySelector("#clearButton"),
+  saveTeamButton: document.querySelector("#saveTeamButton"),
+  teamNameInput: document.querySelector("#teamNameInput"),
+  savedTeams: document.querySelector("#savedTeams"),
   lineNameInput: document.querySelector("#lineNameInput"),
   lineSlotPicker: document.querySelector("#lineSlotPicker"),
   addLineButton: document.querySelector("#addLineButton"),
@@ -449,7 +453,7 @@ async function getMove(name) {
 function saveTeam() {
   window.clearTimeout(pendingSave);
   pendingSave = window.setTimeout(() => {
-    localStorage.setItem("vgc-team-tool", JSON.stringify({ team, lines, selectedLineId }));
+    localStorage.setItem("vgc-team-tool", JSON.stringify({ team, lines, selectedLineId, savedTeams }));
   }, 100);
 }
 
@@ -469,6 +473,7 @@ function loadStoredTeam() {
     lines = Array.isArray(stored?.lines) ? stored.lines : [];
     selectedLineId = typeof stored?.selectedLineId === "string" ? stored.selectedLineId : lines[0]?.id || null;
     lineDraftSlots = lines.find((line) => line.id === selectedLineId)?.slots ? [...lines.find((line) => line.id === selectedLineId).slots] : [];
+    savedTeams = Array.isArray(stored?.savedTeams) ? stored.savedTeams : [];
   } catch {
     localStorage.removeItem("vgc-team-tool");
   }
@@ -696,6 +701,50 @@ function syncLineDraftCheckboxes() {
     if (checkbox) checkbox.checked = lineDraftSlots.includes(index);
   });
 }
+
+function renderSavedTeams() {
+  if (!savedTeams.length) {
+    elements.savedTeams.className = "saved-lines empty-state";
+    elements.savedTeams.textContent = "No saved teams yet.";
+    return;
+  }
+  elements.savedTeams.className = "saved-lines";
+  elements.savedTeams.replaceChildren(...savedTeams.map((entry) => {
+    const row = document.createElement("div");
+    row.className = "saved-line";
+    const load = document.createElement("button");
+    load.type = "button";
+    load.className = "secondary";
+    load.textContent = entry.name;
+    load.addEventListener("click", () => {
+      entry.team.forEach((slot, index) => {
+        team[index] = { pokemon: slot.pokemon || "", ability: slot.ability || "", item: slot.item || "", moves: Array.from({ length: 4 }, (_, moveIndex) => slot.moves?.[moveIndex] || "") };
+      });
+      lines = Array.isArray(entry.lines) ? entry.lines : [];
+      selectedLineId = lines[0]?.id || null;
+      lineDraftSlots = lines[0]?.slots ? [...lines[0].slots] : [];
+      saveTeam();
+      renderTeam();
+    });
+    const del = document.createElement("button");
+    del.type = "button";
+    del.textContent = "Delete";
+    del.addEventListener("click", () => { savedTeams = savedTeams.filter((teamEntry) => teamEntry.id !== entry.id); saveTeam(); analyzeTeam(); });
+    row.append(load, del);
+    return row;
+  }));
+}
+
+function saveCurrentTeamPreset() {
+  const name = elements.teamNameInput.value.trim() || `Team ${savedTeams.length + 1}`;
+  const snapshot = team.map((slot) => ({ pokemon: slot.pokemon, ability: slot.ability, item: slot.item, moves: [...slot.moves] }));
+  const snapshotLines = lines.map((line) => ({ ...line, slots: [...line.slots] }));
+  savedTeams.push({ id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`, name, team: snapshot, lines: snapshotLines });
+  elements.teamNameInput.value = "";
+  saveTeam();
+  analyzeTeam();
+}
+
 function analyzeTeam() {
   const loadedPokemon = team.filter((slot) => slot.meta?.types?.length);
   const loadedMoves = team
@@ -704,6 +753,7 @@ function analyzeTeam() {
   const attackingMoves = loadedMoves.filter((move) => move.damageClass !== "status");
 
   elements.teamStatus.textContent = `${loadedPokemon.length} / 6 loaded`;
+  renderSavedTeams();
 
   const defensiveRows = TYPES.map((attackType) => {
     const multipliers = loadedPokemon.map((slot) => getTypeMultiplier(attackType, slot.meta.types));
@@ -1269,13 +1319,15 @@ elements.importButton.addEventListener("click", importPaste);
 elements.exportButton.addEventListener("click", exportTeam);
 elements.loadSampleButton.addEventListener("click", loadSampleTeam);
 elements.clearButton.addEventListener("click", clearTeam);
+elements.saveTeamButton.addEventListener("click", saveCurrentTeamPreset);
 elements.addLineButton.addEventListener("click", () => {
-  if (lineDraftSlots.length !== 4) return;
+  const defaultSlots = [0, 1, 2, 3];
+  const slots = lineDraftSlots.length === 4 ? [...lineDraftSlots] : defaultSlots;
   const name = elements.lineNameInput.value.trim() || `Line ${lines.length + 1}`;
-  const line = { id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`, name, slots: [...lineDraftSlots] };
+  const line = { id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`, name, slots };
   lines.push(line);
   selectedLineId = line.id;
-  lineDraftSlots = [];
+  lineDraftSlots = [...slots];
   elements.lineNameInput.value = "";
   syncLineDraftCheckboxes();
   saveTeam();
