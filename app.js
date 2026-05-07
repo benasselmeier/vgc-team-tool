@@ -696,7 +696,6 @@ function syncLineDraftCheckboxes() {
     if (checkbox) checkbox.checked = lineDraftSlots.includes(index);
   });
 }
-
 function analyzeTeam() {
   const loadedPokemon = team.filter((slot) => slot.meta?.types?.length);
   const loadedMoves = team
@@ -1271,13 +1270,12 @@ elements.exportButton.addEventListener("click", exportTeam);
 elements.loadSampleButton.addEventListener("click", loadSampleTeam);
 elements.clearButton.addEventListener("click", clearTeam);
 elements.addLineButton.addEventListener("click", () => {
-  const defaultSlots = [0, 1, 2, 3];
-  const slots = lineDraftSlots.length === 4 ? [...lineDraftSlots] : defaultSlots;
+  if (lineDraftSlots.length !== 4) return;
   const name = elements.lineNameInput.value.trim() || `Line ${lines.length + 1}`;
-  const line = { id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`, name, slots };
+  const line = { id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`, name, slots: [...lineDraftSlots] };
   lines.push(line);
   selectedLineId = line.id;
-  lineDraftSlots = [...slots];
+  lineDraftSlots = [];
   elements.lineNameInput.value = "";
   syncLineDraftCheckboxes();
   saveTeam();
