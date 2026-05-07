@@ -211,6 +211,9 @@ const team = Array.from({ length: 6 }, () => ({ pokemon: "", ability: "", item: 
 const pokemonCache = new Map();
 const moveCache = new Map();
 let pendingSave = null;
+let lines = [];
+let selectedLineId = null;
+let lineDraftSlots = [];
 
 const elements = {
   teamGrid: document.querySelector("#teamGrid"),
@@ -228,6 +231,12 @@ const elements = {
   exportButton: document.querySelector("#exportButton"),
   loadSampleButton: document.querySelector("#loadSampleButton"),
   clearButton: document.querySelector("#clearButton"),
+  lineNameInput: document.querySelector("#lineNameInput"),
+  lineSlotPicker: document.querySelector("#lineSlotPicker"),
+  addLineButton: document.querySelector("#addLineButton"),
+  savedLines: document.querySelector("#savedLines"),
+  lineThreatList: document.querySelector("#lineThreatList"),
+  lineCoverageList: document.querySelector("#lineCoverageList"),
 };
 
 function normalizeName(value) {
@@ -440,15 +449,16 @@ async function getMove(name) {
 function saveTeam() {
   window.clearTimeout(pendingSave);
   pendingSave = window.setTimeout(() => {
-    localStorage.setItem("vgc-team-tool", JSON.stringify(team));
+    localStorage.setItem("vgc-team-tool", JSON.stringify({ team, lines, selectedLineId }));
   }, 100);
 }
 
 function loadStoredTeam() {
   try {
     const stored = JSON.parse(localStorage.getItem("vgc-team-tool") || "null");
-    if (!Array.isArray(stored)) return;
-    stored.slice(0, 6).forEach((slot, index) => {
+    const storedTeam = Array.isArray(stored) ? stored : stored?.team;
+    if (!Array.isArray(storedTeam)) return;
+    storedTeam.slice(0, 6).forEach((slot, index) => {
       team[index] = {
         pokemon: slot.pokemon || "",
         ability: slot.ability || "",
@@ -456,6 +466,9 @@ function loadStoredTeam() {
         moves: Array.from({ length: 4 }, (_, moveIndex) => slot.moves?.[moveIndex] || ""),
       };
     });
+    lines = Array.isArray(stored?.lines) ? stored.lines : [];
+    selectedLineId = typeof stored?.selectedLineId === "string" ? stored.selectedLineId : lines[0]?.id || null;
+    lineDraftSlots = lines.find((line) => line.id === selectedLineId)?.slots ? [...lines.find((line) => line.id === selectedLineId).slots] : [];
   } catch {
     localStorage.removeItem("vgc-team-tool");
   }
@@ -472,6 +485,22 @@ function renderTeam() {
     pokemonInput.value = slot.pokemon;
     pokemonInput.addEventListener("change", () => updatePokemon(index, pokemonInput.value));
     pokemonInput.addEventListener("blur", () => updatePokemon(index, pokemonInput.value));
+
+    const lineDraftCheckbox = card.querySelector(".line-draft-checkbox");
+    lineDraftCheckbox.checked = lineDraftSlots.includes(index);
+    lineDraftCheckbox.addEventListener("change", () => {
+      if (lineDraftCheckbox.checked) {
+        if (lineDraftSlots.length >= 4) {
+          lineDraftCheckbox.checked = false;
+          return;
+        }
+        lineDraftSlots = [...lineDraftSlots, index];
+      } else {
+        lineDraftSlots = lineDraftSlots.filter((slotIndex) => slotIndex !== index);
+      }
+      syncLineDraftCheckboxes();
+      analyzeTeam();
+    });
 
     const abilityInput = card.querySelector(".ability-input");
     abilityInput.value = slot.ability;
@@ -603,6 +632,71 @@ function updateMove(index, moveIndex, value) {
   hydrateMove(index, moveIndex).then(analyzeTeam);
 }
 
+
+function getLineSlots(line) {
+  return (line?.slots || []).map((index) => team[index]).filter((slot) => slot?.meta?.types?.length);
+}
+
+function renderLineBuilder() {
+  const buttons = team.map((slot, index) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `line-slot-button ${lineDraftSlots.includes(index) ? "active" : "secondary"}`;
+    const pokemonName = slot.meta?.name || slot.pokemon || `Slot ${index + 1}`;
+    button.textContent = `${index + 1}. ${pokemonName}`;
+    button.title = `Toggle slot ${index + 1} in current line draft`;
+    button.addEventListener("click", () => {
+      if (lineDraftSlots.includes(index)) {
+        lineDraftSlots = lineDraftSlots.filter((entry) => entry !== index);
+      } else if (lineDraftSlots.length < 4) {
+        lineDraftSlots = [...lineDraftSlots, index];
+      }
+      syncLineDraftCheckboxes();
+      analyzeTeam();
+    });
+    return button;
+  });
+  elements.lineSlotPicker.replaceChildren(...buttons);
+}
+
+function renderLinesAnalysis() {
+  renderLineBuilder();
+  elements.addLineButton.textContent = `Save 4-Pokemon Line (${lineDraftSlots.length}/4)`;
+  if (!lines.length) {
+    elements.savedLines.className = "saved-lines empty-state";
+    elements.savedLines.textContent = "No lines saved yet.";
+    elements.lineThreatList.className = "type-list empty-state";
+    elements.lineThreatList.textContent = "Save and select a line to view weaknesses.";
+    elements.lineCoverageList.className = "type-list empty-state";
+    elements.lineCoverageList.textContent = "Save and select a line to view offensive coverage.";
+    return;
+  }
+  elements.savedLines.className = "saved-lines";
+  elements.savedLines.replaceChildren(...lines.map((line) => {
+    const row = document.createElement("div");
+    row.className = `saved-line ${line.id === selectedLineId ? "active" : ""}`;
+    const select = document.createElement("button");
+    select.type = "button";
+    select.className = "secondary";
+    select.textContent = line.name;
+    select.addEventListener("click", () => { selectedLineId = line.id; lineDraftSlots = [...line.slots]; syncLineDraftCheckboxes(); saveTeam(); analyzeTeam(); });
+    const del = document.createElement("button");
+    del.type = "button";
+    del.textContent = "Delete";
+    del.addEventListener("click", () => { lines = lines.filter((entry) => entry.id !== line.id); if (selectedLineId===line.id) selectedLineId=lines[0]?.id||null; saveTeam(); analyzeTeam(); });
+    row.append(select, del);
+    return row;
+  }));
+}
+
+function syncLineDraftCheckboxes() {
+  team.forEach((slot, index) => {
+    const card = getCard(index);
+    const checkbox = card?.querySelector(".line-draft-checkbox");
+    if (checkbox) checkbox.checked = lineDraftSlots.includes(index);
+  });
+}
+
 function analyzeTeam() {
   const loadedPokemon = team.filter((slot) => slot.meta?.types?.length);
   const loadedMoves = team
@@ -636,6 +730,29 @@ function analyzeTeam() {
   renderSpeedControl(getSpeedControlRows(team), loadedPokemon.length);
   renderMatrix(defensiveRows, loadedPokemon.length);
   renderSuggestions(defensiveRows, offensiveRows, loadedPokemon.length, loadedMoves.length - attackingMoves.length);
+  renderLinesAnalysis();
+
+  const selectedLine = lines.find((line) => line.id === selectedLineId);
+  const lineSlots = getLineSlots(selectedLine);
+  const lineMoves = lineSlots.flatMap((slot) => (slot.moveMeta || []).map((move) => getEffectiveMove(slot, move))).filter((move) => move?.effectiveType && move.damageClass !== "status");
+  if (!selectedLine || lineSlots.length !== 4) {
+    elements.lineThreatList.className = "type-list empty-state";
+    elements.lineThreatList.textContent = selectedLine ? "Line needs 4 loaded Pokemon to evaluate." : "Save and select a line to view weaknesses.";
+    elements.lineCoverageList.className = "type-list empty-state";
+    elements.lineCoverageList.textContent = "Save and select a line to view offensive coverage.";
+    return;
+  }
+  const lineDef = TYPES.map((attackType) => ({ type: attackType, weak: lineSlots.filter((slot) => getTypeMultiplier(attackType, slot.meta.types) > 1).length }))
+    .filter((row) => row.weak >= 2).sort((a,b)=>b.weak-a.weak).slice(0,6);
+  elements.lineThreatList.className = lineDef.length ? "type-list" : "type-list empty-state";
+  elements.lineThreatList.textContent = "";
+  if (lineDef.length) elements.lineThreatList.replaceChildren(...lineDef.map((row)=>scoreChip(row.type, `${row.weak} weak`)));
+  else elements.lineThreatList.textContent = "No major shared weakness for this line.";
+
+  const lineOff = TYPES.map((defType)=>({type:defType,count:lineMoves.filter((move)=>getTypeMultiplier(move.effectiveType,[defType])>1).length}))
+    .sort((a,b)=>a.count-b.count||a.type.localeCompare(b.type)).slice(0,6);
+  elements.lineCoverageList.className = "type-list";
+  elements.lineCoverageList.replaceChildren(...lineOff.map((row)=>scoreChip(row.type, `${row.count} hits`)));
 }
 
 function renderThreats(rows, teamSize) {
@@ -1153,6 +1270,19 @@ elements.importButton.addEventListener("click", importPaste);
 elements.exportButton.addEventListener("click", exportTeam);
 elements.loadSampleButton.addEventListener("click", loadSampleTeam);
 elements.clearButton.addEventListener("click", clearTeam);
+elements.addLineButton.addEventListener("click", () => {
+  const defaultSlots = [0, 1, 2, 3];
+  const slots = lineDraftSlots.length === 4 ? [...lineDraftSlots] : defaultSlots;
+  const name = elements.lineNameInput.value.trim() || `Line ${lines.length + 1}`;
+  const line = { id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`, name, slots };
+  lines.push(line);
+  selectedLineId = line.id;
+  lineDraftSlots = [...slots];
+  elements.lineNameInput.value = "";
+  syncLineDraftCheckboxes();
+  saveTeam();
+  analyzeTeam();
+});
 
 loadStoredTeam();
 renderTeam();
