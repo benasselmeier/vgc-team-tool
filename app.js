@@ -213,6 +213,7 @@ const moveCache = new Map();
 let pendingSave = null;
 let lines = [];
 let selectedLineId = null;
+let lineDraftSlots = [];
 
 const elements = {
   teamGrid: document.querySelector("#teamGrid"),
@@ -467,6 +468,7 @@ function loadStoredTeam() {
     });
     lines = Array.isArray(stored?.lines) ? stored.lines : [];
     selectedLineId = typeof stored?.selectedLineId === "string" ? stored.selectedLineId : lines[0]?.id || null;
+    lineDraftSlots = lines.find((line) => line.id === selectedLineId)?.slots ? [...lines.find((line) => line.id === selectedLineId).slots] : [];
   } catch {
     localStorage.removeItem("vgc-team-tool");
   }
@@ -622,25 +624,28 @@ function getLineSlots(line) {
 function renderLineBuilder() {
   elements.lineSlotPicker.replaceChildren(
     ...team.map((slot, index) => {
-      const label = document.createElement("label");
-      const input = document.createElement("input");
-      input.type = "checkbox";
-      input.value = String(index);
-      const selected = lines.find((line) => line.id === selectedLineId);
-      input.checked = Boolean(selected?.slots?.includes(index));
-      input.addEventListener("change", () => {
-        const chosen = [...elements.lineSlotPicker.querySelectorAll("input:checked")];
-        if (chosen.length > 4) input.checked = false;
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `line-slot-button ${lineDraftSlots.includes(index) ? "active" : "secondary"}`;
+      const pokemonName = slot.meta?.name || slot.pokemon || `Slot ${index + 1}`;
+      button.textContent = `${index + 1}. ${pokemonName}`;
+      button.title = `Toggle slot ${index + 1} in current line draft`;
+      button.addEventListener("click", () => {
+        if (lineDraftSlots.includes(index)) {
+          lineDraftSlots = lineDraftSlots.filter((entry) => entry !== index);
+        } else if (lineDraftSlots.length < 4) {
+          lineDraftSlots = [...lineDraftSlots, index];
+        }
+        renderLineBuilder();
       });
-      const name = slot.meta?.name || slot.pokemon || `Slot ${index + 1}`;
-      label.append(input, document.createTextNode(` ${index + 1}. ${name}`));
-      return label;
+      return button;
     }),
   );
 }
 
 function renderLinesAnalysis() {
   renderLineBuilder();
+  elements.addLineButton.textContent = `Save 4-Pokemon Line (${lineDraftSlots.length}/4)`;
   if (!lines.length) {
     elements.savedLines.className = "saved-lines empty-state";
     elements.savedLines.textContent = "No lines saved yet.";
@@ -658,7 +663,7 @@ function renderLinesAnalysis() {
     select.type = "button";
     select.className = "secondary";
     select.textContent = line.name;
-    select.addEventListener("click", () => { selectedLineId = line.id; saveTeam(); analyzeTeam(); });
+    select.addEventListener("click", () => { selectedLineId = line.id; lineDraftSlots = [...line.slots]; saveTeam(); analyzeTeam(); });
     const del = document.createElement("button");
     del.type = "button";
     del.textContent = "Delete";
@@ -1242,12 +1247,12 @@ elements.exportButton.addEventListener("click", exportTeam);
 elements.loadSampleButton.addEventListener("click", loadSampleTeam);
 elements.clearButton.addEventListener("click", clearTeam);
 elements.addLineButton.addEventListener("click", () => {
-  const checked = [...elements.lineSlotPicker.querySelectorAll("input:checked")].map((node) => Number(node.value));
-  if (checked.length !== 4) return;
+  if (lineDraftSlots.length !== 4) return;
   const name = elements.lineNameInput.value.trim() || `Line ${lines.length + 1}`;
-  const line = { id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`, name, slots: checked };
+  const line = { id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`, name, slots: [...lineDraftSlots] };
   lines.push(line);
   selectedLineId = line.id;
+  lineDraftSlots = [];
   elements.lineNameInput.value = "";
   saveTeam();
   analyzeTeam();
