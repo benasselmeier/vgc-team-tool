@@ -71,6 +71,24 @@
             <div id="speedControlInsight" class="speed-control-list empty-state">Add speed control moves to see turn-order effects.</div>
           </section>
 
+
+          <section class="metric-block">
+            <h3>Lines & Modes</h3>
+            <p class="line-help">Build 4-Pokemon lines to compare matchup profiles.</p>
+            <div class="line-builder">
+              <label>
+                Line name
+                <input id="lineNameInput" type="text" placeholder="vs Sun / Charizard" />
+              </label>
+              <div id="lineSlotPicker" class="line-slot-picker"></div>
+              <button id="addLineButton" type="button">Save 4-Pokemon Line</button>
+            </div>
+            <div id="savedLines" class="saved-lines empty-state">No lines saved yet.</div>
+            <h4>Selected line matchup</h4>
+            <div id="lineThreatList" class="type-list empty-state">Save and select a line to view weaknesses.</div>
+            <h4>Selected line coverage</h4>
+            <div id="lineCoverageList" class="type-list empty-state">Save and select a line to view offensive coverage.</div>
+          </section>
           <section class="metric-block">
             <h3>Defensive Matrix</h3>
             <div id="defenseMatrix" class="matrix"></div>

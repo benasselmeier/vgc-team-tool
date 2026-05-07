@@ -635,3 +635,11 @@ textarea:focus {
     grid-template-columns: minmax(0, 1fr) auto;
   }
 }
+
+.line-help { margin: 0 0 8px; color: var(--muted); font-size: 13px; }
+.line-builder { display: grid; gap: 8px; margin-bottom: 10px; }
+.line-slot-picker { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.line-slot-picker label { text-transform: none; font-size: 12px; font-weight: 600; color: var(--ink); display: flex; align-items: center; gap: 4px; }
+.saved-lines { display: grid; gap: 6px; margin-bottom: 10px; }
+.saved-line { display: flex; gap: 6px; }
+.saved-line.active { outline: 1px solid var(--accent); border-radius: 8px; padding: 4px; }

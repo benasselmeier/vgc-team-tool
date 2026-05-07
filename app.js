@@ -211,6 +211,8 @@ const team = Array.from({ length: 6 }, () => ({ pokemon: "", ability: "", item: 
 const pokemonCache = new Map();
 const moveCache = new Map();
 let pendingSave = null;
+let lines = [];
+let selectedLineId = null;
 
 const elements = {
   teamGrid: document.querySelector("#teamGrid"),
@@ -228,6 +230,12 @@ const elements = {
   exportButton: document.querySelector("#exportButton"),
   loadSampleButton: document.querySelector("#loadSampleButton"),
   clearButton: document.querySelector("#clearButton"),
+  lineNameInput: document.querySelector("#lineNameInput"),
+  lineSlotPicker: document.querySelector("#lineSlotPicker"),
+  addLineButton: document.querySelector("#addLineButton"),
+  savedLines: document.querySelector("#savedLines"),
+  lineThreatList: document.querySelector("#lineThreatList"),
+  lineCoverageList: document.querySelector("#lineCoverageList"),
 };
 
 function normalizeName(value) {
@@ -440,15 +448,16 @@ async function getMove(name) {
 function saveTeam() {
   window.clearTimeout(pendingSave);
   pendingSave = window.setTimeout(() => {
-    localStorage.setItem("vgc-team-tool", JSON.stringify(team));
+    localStorage.setItem("vgc-team-tool", JSON.stringify({ team, lines, selectedLineId }));
   }, 100);
 }
 
 function loadStoredTeam() {
   try {
     const stored = JSON.parse(localStorage.getItem("vgc-team-tool") || "null");
-    if (!Array.isArray(stored)) return;
-    stored.slice(0, 6).forEach((slot, index) => {
+    const storedTeam = Array.isArray(stored) ? stored : stored?.team;
+    if (!Array.isArray(storedTeam)) return;
+    storedTeam.slice(0, 6).forEach((slot, index) => {
       team[index] = {
         pokemon: slot.pokemon || "",
         ability: slot.ability || "",
@@ -456,6 +465,8 @@ function loadStoredTeam() {
         moves: Array.from({ length: 4 }, (_, moveIndex) => slot.moves?.[moveIndex] || ""),
       };
     });
+    lines = Array.isArray(stored?.lines) ? stored.lines : [];
+    selectedLineId = typeof stored?.selectedLineId === "string" ? stored.selectedLineId : lines[0]?.id || null;
   } catch {
     localStorage.removeItem("vgc-team-tool");
   }
@@ -603,6 +614,60 @@ function updateMove(index, moveIndex, value) {
   hydrateMove(index, moveIndex).then(analyzeTeam);
 }
 
+
+function getLineSlots(line) {
+  return (line?.slots || []).map((index) => team[index]).filter((slot) => slot?.meta?.types?.length);
+}
+
+function renderLineBuilder() {
+  elements.lineSlotPicker.replaceChildren(
+    ...team.map((slot, index) => {
+      const label = document.createElement("label");
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.value = String(index);
+      const selected = lines.find((line) => line.id === selectedLineId);
+      input.checked = Boolean(selected?.slots?.includes(index));
+      input.addEventListener("change", () => {
+        const chosen = [...elements.lineSlotPicker.querySelectorAll("input:checked")];
+        if (chosen.length > 4) input.checked = false;
+      });
+      const name = slot.meta?.name || slot.pokemon || `Slot ${index + 1}`;
+      label.append(input, document.createTextNode(` ${index + 1}. ${name}`));
+      return label;
+    }),
+  );
+}
+
+function renderLinesAnalysis() {
+  renderLineBuilder();
+  if (!lines.length) {
+    elements.savedLines.className = "saved-lines empty-state";
+    elements.savedLines.textContent = "No lines saved yet.";
+    elements.lineThreatList.className = "type-list empty-state";
+    elements.lineThreatList.textContent = "Save and select a line to view weaknesses.";
+    elements.lineCoverageList.className = "type-list empty-state";
+    elements.lineCoverageList.textContent = "Save and select a line to view offensive coverage.";
+    return;
+  }
+  elements.savedLines.className = "saved-lines";
+  elements.savedLines.replaceChildren(...lines.map((line) => {
+    const row = document.createElement("div");
+    row.className = `saved-line ${line.id === selectedLineId ? "active" : ""}`;
+    const select = document.createElement("button");
+    select.type = "button";
+    select.className = "secondary";
+    select.textContent = line.name;
+    select.addEventListener("click", () => { selectedLineId = line.id; saveTeam(); analyzeTeam(); });
+    const del = document.createElement("button");
+    del.type = "button";
+    del.textContent = "Delete";
+    del.addEventListener("click", () => { lines = lines.filter((entry) => entry.id !== line.id); if (selectedLineId===line.id) selectedLineId=lines[0]?.id||null; saveTeam(); analyzeTeam(); });
+    row.append(select, del);
+    return row;
+  }));
+}
+
 function analyzeTeam() {
   const loadedPokemon = team.filter((slot) => slot.meta?.types?.length);
   const loadedMoves = team
@@ -636,6 +701,29 @@ function analyzeTeam() {
   renderSpeedControl(getSpeedControlRows(team), loadedPokemon.length);
   renderMatrix(defensiveRows, loadedPokemon.length);
   renderSuggestions(defensiveRows, offensiveRows, loadedPokemon.length, loadedMoves.length - attackingMoves.length);
+  renderLinesAnalysis();
+
+  const selectedLine = lines.find((line) => line.id === selectedLineId);
+  const lineSlots = getLineSlots(selectedLine);
+  const lineMoves = lineSlots.flatMap((slot) => (slot.moveMeta || []).map((move) => getEffectiveMove(slot, move))).filter((move) => move?.effectiveType && move.damageClass !== "status");
+  if (!selectedLine || lineSlots.length !== 4) {
+    elements.lineThreatList.className = "type-list empty-state";
+    elements.lineThreatList.textContent = selectedLine ? "Line needs 4 loaded Pokemon to evaluate." : "Save and select a line to view weaknesses.";
+    elements.lineCoverageList.className = "type-list empty-state";
+    elements.lineCoverageList.textContent = "Save and select a line to view offensive coverage.";
+    return;
+  }
+  const lineDef = TYPES.map((attackType) => ({ type: attackType, weak: lineSlots.filter((slot) => getTypeMultiplier(attackType, slot.meta.types) > 1).length }))
+    .filter((row) => row.weak >= 2).sort((a,b)=>b.weak-a.weak).slice(0,6);
+  elements.lineThreatList.className = lineDef.length ? "type-list" : "type-list empty-state";
+  elements.lineThreatList.textContent = "";
+  if (lineDef.length) elements.lineThreatList.replaceChildren(...lineDef.map((row)=>scoreChip(row.type, `${row.weak} weak`)));
+  else elements.lineThreatList.textContent = "No major shared weakness for this line.";
+
+  const lineOff = TYPES.map((defType)=>({type:defType,count:lineMoves.filter((move)=>getTypeMultiplier(move.effectiveType,[defType])>1).length}))
+    .sort((a,b)=>a.count-b.count||a.type.localeCompare(b.type)).slice(0,6);
+  elements.lineCoverageList.className = "type-list";
+  elements.lineCoverageList.replaceChildren(...lineOff.map((row)=>scoreChip(row.type, `${row.count} hits`)));
 }
 
 function renderThreats(rows, teamSize) {
@@ -1153,6 +1241,17 @@ elements.importButton.addEventListener("click", importPaste);
 elements.exportButton.addEventListener("click", exportTeam);
 elements.loadSampleButton.addEventListener("click", loadSampleTeam);
 elements.clearButton.addEventListener("click", clearTeam);
+elements.addLineButton.addEventListener("click", () => {
+  const checked = [...elements.lineSlotPicker.querySelectorAll("input:checked")].map((node) => Number(node.value));
+  if (checked.length !== 4) return;
+  const name = elements.lineNameInput.value.trim() || `Line ${lines.length + 1}`;
+  const line = { id: `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`, name, slots: checked };
+  lines.push(line);
+  selectedLineId = line.id;
+  elements.lineNameInput.value = "";
+  saveTeam();
+  analyzeTeam();
+});
 
 loadStoredTeam();
 renderTeam();
